@@ -64,8 +64,9 @@
 
 | 操作 | 功能 | 说明 |
 |---|---|---|
-| **单击** | 切换屏幕模式 | 循环切换显示布局（功能开发中）|
-| **双击** | 刷新所有数据 | 手动更新天气、NTP 时间、传感器数据 |
+| **单击** | 切换屏幕模式 | 天气 → 音乐 → 番茄钟 → 网页 → 天气 |
+| **双击** | 刷新数据 | 网页页重新加载网站；其他页面刷新时间、传感器等数据，天气等待 MCP 同步 |
+| **长按 2 秒（网页页）** | 阅读下一屏 | 到最后一屏后回到正文开头 |
 | **长按 2 秒** | 显示系统信息 | 在 AI 对话区循环滚动显示：<br>• CPU 频率 (240MHz)<br>• 运行时间<br>• SRAM 使用情况（已用/总量 百分比）<br>• PSRAM 使用情况（已用/总量 百分比）<br>• 电池电量和充电状态<br>• WiFi 连接状态<br>**注：** 长文本会自动循环滚动（2秒一屏），AI 对话时恢复正常换行 |
 
 ---
@@ -103,6 +104,31 @@
 │                                          │
 │  😊 待命  │  说「开始番茄钟」启动         │  ← AI 状态卡
 └──────────────────────────────────────────┘
+```
+
+### 网页页（icespite.top）
+
+第四页通过 HTTPS 直接加载 `https://icespite.top/`，以适合 400×300 黑白屏的文字阅读模式显示正文。顶部显示网站与加载状态，中间显示正文，底部显示阅读页码和按键提示。
+
+- 单击 USER 循环切入，或说“打开网页”，由 AI 调用 `self.disp.switch(mode="web")`。
+- 首次进入自动加载；再次进入保留当前正文和阅读位置。
+- 长按 USER 阅读下一屏，最后一屏之后回到开头；双击 USER 重新加载。
+- 加载在独立后台任务中执行，不持有屏幕锁等待网络。未联网或加载失败时提示重试，刷新失败保留上次成功的正文。
+- 使用系统证书包校验 HTTPS。HTML 响应最多 32 KiB，提取后的正文最多 8 KiB；超过正文限制时按完整 UTF-8 字符截断并提示。
+
+这是网页**文字阅读模式**：显示网站返回的 HTML 正文，过滤脚本、样式和注释；不执行 JavaScript，不还原原站 CSS、图片、动画，也不提供链接跳转。需要保留原始网页视觉效果时，应另接浏览器截图服务。
+
+代码入口：`web_ui.cc`（页面与联网）、`managers/web_page_parser.cc`（正文提取）。
+
+可在仓库根目录运行主机侧解析测试：
+
+```bash
+g++ -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined \
+  -I main/boards/waveshare-s3-rlcd-4.2/managers \
+  tests/rlcd_web_page_parser_test.cc \
+  main/boards/waveshare-s3-rlcd-4.2/managers/web_page_parser.cc \
+  -o /tmp/xiaozhi-web-parser-test
+/tmp/xiaozhi-web-parser-test
 ```
 
 ### 布局说明
@@ -401,6 +427,17 @@ idf.py build
 idf.py flash monitor
 ```
 
+### Docker 编译与打包
+
+在仓库根目录执行。首次编译前，将板型目录中的 `secret_config.h.example` 复制为同目录的 `secret_config.h`（已有配置时保留原文件）。模板提供默认时区和 NTP 配置；当前天气使用 MCP 回写，不需要填写天气 API 密钥。`secret_config.h` 已由 Git 忽略。
+
+```bash
+docker run --rm -it -v "$PWD":/project -w /project espressif/idf:v5.5.2 \
+  bash -c 'source "$IDF_PATH/export.sh" && python scripts/release.py waveshare-s3-rlcd-4.2 --name waveshare-s3-rlcd-4.2'
+```
+
+成功后生成 `build/merged-binary.bin` 和 `releases/v2.2.2_waveshare-s3-rlcd-4.2.zip`。发布脚本会跳过已存在的同名 ZIP；修改代码后再次验证时，先将旧 ZIP 移走，避免误以为执行了新编译。
+
 ### 常用命令
 ```bash
 # 仅烧录（不重新编译）
@@ -493,7 +530,8 @@ idf.py monitor
 
 ### 已实现
 - 自动省电模式（5 分钟无活动后降频刷新）
-- 多屏幕模式切换（天气页 / 音乐页 / 番茄钟页）
+- 多屏幕模式切换（天气页 / 音乐页 / 番茄钟页 / 网页页）
+- `icespite.top` 网页文字阅读、翻页与手动刷新
 - 番茄钟（启动 / 暂停 / 恢复 / 停止）与白噪音播放
 - MCP 驱动天气回写（`self.weather.update`）
 - 备忘录基础能力（新增 / 列表 / 完成 / 清空）

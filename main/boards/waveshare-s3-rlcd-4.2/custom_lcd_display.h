@@ -26,6 +26,7 @@
 //   weather_ui.cc          - 天气站 UI 布局（SetupWeatherUI）
 //   music_ui.cc            - 音乐页 UI 布局（SetupMusicUI）
 //   pomodoro_ui.cc         - 番茄钟 UI 布局（SetupPomodoroUI）
+//   web_ui.cc              - 网页展示与加载
 //   data_update_task.cc    - 后台数据更新任务（时间/天气/传感器/电池/WiFi/AI状态/番茄钟）
 //   custom_lcd_display.cc  - 核心类（构造/析构/AI适配/备忘录/基类重写）
 class CustomLcdDisplay : public LcdDisplay {
@@ -34,6 +35,7 @@ private:
         MODE_WEATHER = 0,
         MODE_MUSIC = 1,
         MODE_POMODORO = 2,
+        MODE_WEB = 3,
     };
     DisplayMode display_mode_ = MODE_WEATHER;
 
@@ -42,6 +44,15 @@ private:
     lv_obj_t *weather_page_ = nullptr;
     lv_obj_t *music_page_ = nullptr;
     lv_obj_t *pomodoro_page_ = nullptr;
+    lv_obj_t *web_page_ = nullptr;
+    lv_obj_t *web_status_label_ = nullptr;
+    lv_obj_t *web_content_label_ = nullptr;
+    lv_obj_t *web_content_view_ = nullptr;
+    lv_obj_t *web_hint_label_ = nullptr;
+    bool web_loaded_ = false;  // Accessed under DisplayLockGuard.
+    int web_page_index_ = 0;
+    std::atomic<bool> web_loading_{false};
+    std::atomic<bool> web_stopping_{false};
 
     // ===== 天气站 UI 组件 =====
     // 状态栏（右上角浮动胶囊）
@@ -124,6 +135,10 @@ private:
     void SetupWeatherUI();
     void SetupMusicUI();
     void SetupPomodoroUI();
+    void SetupWebUI();
+    void StartWebLoad();  // Caller holds the display lock; HTTP runs in its own task.
+    void UpdateWebPagination();
+    static void WebLoadTask(void *arg);
     void ApplyDisplayMode();
     
     // 备忘录
@@ -176,7 +191,11 @@ public:
     void CycleDisplayMode();
     bool IsMusicMode() const { return display_mode_ == MODE_MUSIC; }
     bool IsPomodoroMode() const { return display_mode_ == MODE_POMODORO; }
+    bool IsWebMode() const { return display_mode_ == MODE_WEB; }
     void SwitchToPomodoroPage();
+    void SwitchToWebPage();
+    void RefreshWebPage();
+    void NextWebPage();
 
     // 番茄钟 UI 更新方法
     void UpdatePomodoroDisplay(const char* state_text, const char* countdown_text,
