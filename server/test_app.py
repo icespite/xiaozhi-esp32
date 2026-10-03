@@ -179,6 +179,24 @@ class UploadTests(unittest.TestCase):
         with patch.object(ContentStore, "display_html", side_effect=lambda state: render(state) + b"\n"):
             self.assertEqual(self.request("GET", "/display", headers={"If-None-Match": new_etag})[0], 200)
 
+    def test_no_cache_sends_full_content_even_for_matching_etag(self):
+        self.publish_image(self.image_bytes(), text="缓存排查")
+        _, display_headers, display = self.request("GET", "/display")
+        _, api_headers, api = self.request("GET", "/api/content")
+        self.server.no_cache = True
+        for path, etag, expected in (("/display", display_headers["ETag"], display),
+                                     ("/api/content", api_headers["ETag"], api)):
+            with self.subTest(path=path):
+                status, headers, body = self.request("GET", path, headers={"If-None-Match": etag})
+                self.assertEqual(status, 200)
+                self.assertEqual(body, expected)
+                self.assertEqual(headers["Cache-Control"], "no-store")
+                self.assertNotIn("ETag", headers)
+        status, headers, body = self.request("GET", "/media/" + self.store.current()["image"])
+        self.assertEqual(status, 200)
+        self.assertTrue(body.startswith(b"\x89PNG"))
+        self.assertEqual(headers["Cache-Control"], "no-store")
+
     def test_image_conversion_and_stable_old_media(self):
         status, _, body = self.publish_image(self.image_bytes())
         self.assertEqual(status, 200, body)

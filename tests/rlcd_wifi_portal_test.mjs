@@ -34,7 +34,7 @@ function page({getFails = false, saveFails = false, uploadGetFails = false, uplo
             if (path === '/upload/config') {
                 const failed = options.method === 'POST' ? uploadSaveFails : uploadGetFails;
                 if (failed) return {ok: false, text: async () => 'Upload URL save failed'};
-                if (options.method === 'POST') uploadUrl = options.body;
+                if (options.method === 'POST') uploadUrl = options.body || 'http://192.168.8.176:8001/display';
                 return {ok: true, json: async () => ({url: uploadUrl})};
             }
             assert.equal(path, '/submit');
@@ -111,14 +111,14 @@ function page({getFails = false, saveFails = false, uploadGetFails = false, uplo
     await context.submitForm(event);
     assert.equal(calls[1].body, 'https://existing.example/news');
 }
-// The upload reader uses a separate URL and can be disabled without changing web.
+// Clearing the upload URL restores its default without changing the web URL.
 {
     const {context, node, calls} = page();
     await context.loadUploadUrl();
     assert.equal(node('upload_url').value, 'http://192.168.1.20:8000/display');
     node('upload_url').value = '';
     await context.submitUploadUrl(event);
-    assert.equal(node('upload_url').value, '');
+    assert.equal(node('upload_url').value, 'http://192.168.8.176:8001/display');
     assert(calls.every(call => call.path === '/upload/config'));
 }
 for (const flags of [{uploadGetFails: true}, {uploadSaveFails: true}]) {

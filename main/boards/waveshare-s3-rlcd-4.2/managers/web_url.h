@@ -9,6 +9,7 @@
 namespace web_page {
 
 inline constexpr char kDefaultUrl[] = "https://icespite.top/";
+inline constexpr char kDefaultUploadUrl[] = "http://192.168.8.176:8001/display";
 inline constexpr size_t kMaxUrlBytes = 1024;
 
 // An empty field restores the default. Reject unsupported schemes, credentials,
@@ -74,10 +75,10 @@ inline bool NormalizeUrl(std::string_view input, std::string& url) {
 }
 
 std::string GetUrl();
-// Empty disables the upload reader until a server URL is configured.
+// An empty field restores the default upload server URL.
 inline bool NormalizeUploadUrl(std::string_view input, std::string& url) {
     if (input.find_first_not_of(" \t\r\n") == input.npos) {
-        url.clear();
+        url = kDefaultUploadUrl;
         return true;
     }
     return NormalizeUrl(input, url);

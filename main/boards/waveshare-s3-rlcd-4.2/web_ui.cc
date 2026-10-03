@@ -290,6 +290,12 @@ void CustomLcdDisplay::UpdateWebPagination(ReaderPage& page) {
             lv_obj_set_style_text_align(page.content, LV_TEXT_ALIGN_CENTER, 0);
             lv_label_set_text(page.content, media.alt.c_str());
         } else {
+            // Download success does not imply decode success. Retry failed
+            // images instead of validating this incomplete page forever.
+            page.etag.clear();
+            ESP_LOGW(kTag, "Reader %d image %d failed: %s", page.mode, image_index, media.error.c_str());
+            lv_label_set_text(page.status, page.mode == MODE_UPLOAD ?
+                              "图片失败，将自动重试" : "图片失败，双击重试");
             std::string message = media.alt.empty() ? "图片" : media.alt;
             message += "\n" + media.error;
             lv_label_set_text(page.content, message.c_str());
@@ -329,7 +335,11 @@ void CustomLcdDisplay::RefreshWebPage() {
 }
 
 void CustomLcdDisplay::StartWebLoad(ReaderPage& page, bool force) {
-    if (!page.status || web_stopping_ || page.loading.exchange(true)) return;
+    if (!page.status || web_stopping_) return;
+    if (page.loading.exchange(true)) {
+        if (force) page.refresh_pending = true;
+        return;
+    }
     if (!WifiManager::GetInstance().IsConnected()) {
         lv_label_set_text(page.status, "未联网，双击重试");
         if (!page.loaded) {
@@ -343,13 +353,14 @@ void CustomLcdDisplay::StartWebLoad(ReaderPage& page, bool force) {
     if (page.request_url.empty()) {
         lv_label_set_text(page.status, "请先设置上传内容地址");
         if (!page.loaded) {
-            lv_label_set_text(page.content, "请启动电脑上的上传服务，在配网页面填写上传内容地址：\nhttp://电脑IP:8000/display");
+            lv_label_set_text(page.content, "请启动电脑上的上传服务，在配网页面填写上传内容地址：\nhttp://192.168.8.176:8001/display");
             UpdateWebPagination(page);
         }
         page.loading = false;
         return;
     }
     page.request_etag = !force && page.loaded_url == page.request_url ? page.etag : "";
+    ESP_LOGI(kTag, "Reader %d request: force=%d conditional=%d", page.mode, force, !page.request_etag.empty());
     if (force || !page.loaded) lv_label_set_text(page.status, "正在加载...");
     // Never perform TLS/HTTP while holding the LVGL lock or on the button callback.
     if (xTaskCreate(WebLoadTask, "web_page_load", 8192, &page, 1, nullptr) != pdPASS) {
@@ -387,6 +398,8 @@ void CustomLcdDisplay::WebLoadTask(void* arg) {
                           {}, page.mode == MODE_UPLOAD ? &etag : nullptr, &unchanged);
             if (error.empty() && !unchanged) {
                 content = web_page::ExtractPage(std::string_view(reinterpret_cast<char*>(buffer.get()), size), final_url);
+                ESP_LOGI(kTag, "Reader %d parsed: text_bytes=%u images=%u", page.mode,
+                         static_cast<unsigned>(content.text.size()), static_cast<unsigned>(content.images.size()));
                 if (content.text.empty() && content.images.empty()) error = "网页没有可显示的内容";
             }
         }
@@ -447,6 +460,13 @@ void CustomLcdDisplay::WebLoadTask(void* arg) {
             if (!unchanged) self->UpdateWebPagination(page);
         }
     }
-    page.loading = false;
+    {
+        DisplayLockGuard lock(self);
+        page.loading = false;
+        if (page.refresh_pending && !self->web_stopping_) {
+            page.refresh_pending = false;
+            self->StartWebLoad(page);
+        }
+    }
     vTaskDelete(nullptr);
 }

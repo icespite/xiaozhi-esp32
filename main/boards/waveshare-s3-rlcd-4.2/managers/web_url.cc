@@ -23,6 +23,6 @@ std::string GetStoredUrl(const char* key, const char* fallback) {
 }  // namespace
 
 std::string GetUrl() { return GetStoredUrl("url", kDefaultUrl); }
-std::string GetUploadUrl() { return GetStoredUrl("upload_url", ""); }
+std::string GetUploadUrl() { return GetStoredUrl("upload_url", kDefaultUploadUrl); }
 
 }  // namespace web_page

@@ -148,8 +148,9 @@ class ContentStore:
 class UploadServer(ThreadingHTTPServer):
     daemon_threads = True
 
-    def __init__(self, address, store):
+    def __init__(self, address, store, *, no_cache=False):
         self.store = store
+        self.no_cache = no_cache
         super().__init__(address, UploadHandler)
 
 
@@ -164,9 +165,9 @@ class UploadHandler(BaseHTTPRequestHandler):
         self.send_response(status)
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Cache-Control", "no-store" if self.server.no_cache else "no-cache")
         self.send_header("X-Content-Type-Options", "nosniff")
-        if etag:
+        if etag and not self.server.no_cache:
             self.send_header("ETag", etag)
         self.end_headers()
         if self.command != "HEAD":
@@ -193,7 +194,12 @@ class UploadHandler(BaseHTTPRequestHandler):
             # A rendering change must invalidate the device's cached page even
             # when content.json has not changed across a server upgrade.
             etag = '"' + (sha256(body).hexdigest() if path == "/display" else state["revision"]) + '"'
-            if self.headers.get("If-None-Match") == etag:
+            if path == "/display" and self.server.no_cache:
+                image = state["image"]
+                image_exists = bool(image and (self.server.store.media / image).is_file())
+                self.log_message("display: cache=disabled text_bytes=%d image=%s image_exists=%s",
+                                 len(state["text"].encode("utf-8")), image or "none", image_exists)
+            if not self.server.no_cache and self.headers.get("If-None-Match") == etag:
                 self.respond(304, etag=etag)
             elif path == "/display":
                 self.respond(200, body, "text/html; charset=utf-8", etag)
@@ -268,10 +274,15 @@ def main():
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--data-dir", type=Path, default=ROOT / "data")
+    parser.add_argument("--no-cache", action="store_true",
+                        help="排查显示问题：禁用 304，始终返回完整内容，并记录图片状态")
     args = parser.parse_args()
-    server = UploadServer((args.host, args.port), ContentStore(args.data_dir))
+    server = UploadServer((args.host, args.port), ContentStore(args.data_dir), no_cache=args.no_cache)
     print(f"上传服务已启动：http://{args.host}:{server.server_port}", flush=True)
     print("在设备配网页面填写：http://电脑的局域网IP:端口/display", flush=True)
+    print(f"内容存储目录：{args.data_dir.resolve()}", flush=True)
+    if args.no_cache:
+        print("排查模式：已禁用 304，每次返回完整内容；GIF 可能随刷新重新播放。", flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

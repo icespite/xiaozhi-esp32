@@ -15,11 +15,11 @@
     <h3>上传内容地址 / Upload display URL</h3>
     <p>
         <label for="upload_url">第五页内容地址 / Display URL:</label>
-        <input type="url" id="upload_url" maxlength="1024" placeholder="http://192.168.1.100:8000/display"
+        <input type="url" id="upload_url" maxlength="1024" placeholder="http://192.168.8.176:8001/display"
                style="width:100%;box-sizing:border-box" disabled>
     </p>
-    <p style="font-size:13px">填写 Python 上传服务的 /display 地址；留空暂不启用。<br>
-        Enter your upload server's /display URL. Leave empty to disable.</p>
+    <p style="font-size:13px">填写 Python 上传服务的 /display 地址；留空恢复默认 http://192.168.8.176:8001/display。<br>
+        Enter your upload server's /display URL. Leave empty to restore the default.</p>
     <p id="upload_url_message" role="status"></p>
     <p style="text-align:center"><input type="submit" id="upload_url_save" value="保存上传地址 / Save upload URL"></p>
 </form>

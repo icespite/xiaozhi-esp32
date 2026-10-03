@@ -31,7 +31,7 @@ int main() {
     longest.resize(web_page::kMaxUrlBytes, 'a');
     assert(web_page::NormalizeUrl(longest, url));
     assert(!web_page::NormalizeUrl(longest + "a", url));
-    assert(web_page::NormalizeUploadUrl(" \n", url) && url.empty());
+    assert(web_page::NormalizeUploadUrl(" \n", url) && url == web_page::kDefaultUploadUrl);
     assert(web_page::NormalizeUploadUrl("http://192.168.1.100:8000/display", url));
     assert(url == "http://192.168.1.100:8000/display");
     assert(!web_page::NormalizeUploadUrl("file:///tmp/image.png", url));

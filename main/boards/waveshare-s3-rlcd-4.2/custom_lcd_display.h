@@ -67,6 +67,7 @@ private:
         int active_image = -1;
         int page_index = 0;
         bool loaded = false;
+        bool refresh_pending = false;  // Accessed under DisplayLockGuard.
         std::string loaded_url;
         std::string etag;
         std::string request_url;
