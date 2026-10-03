@@ -74,5 +74,14 @@ inline bool NormalizeUrl(std::string_view input, std::string& url) {
 }
 
 std::string GetUrl();
+// Empty disables the upload reader until a server URL is configured.
+inline bool NormalizeUploadUrl(std::string_view input, std::string& url) {
+    if (input.find_first_not_of(" \t\r\n") == input.npos) {
+        url.clear();
+        return true;
+    }
+    return NormalizeUrl(input, url);
+}
+std::string GetUploadUrl();
 
 }  // namespace web_page

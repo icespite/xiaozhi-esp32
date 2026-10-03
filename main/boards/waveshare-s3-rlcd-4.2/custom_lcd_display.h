@@ -37,6 +37,7 @@ private:
         MODE_MUSIC = 1,
         MODE_POMODORO = 2,
         MODE_WEB = 3,
+        MODE_UPLOAD = 4,
     };
     DisplayMode display_mode_ = MODE_WEATHER;
 
@@ -45,29 +46,41 @@ private:
     lv_obj_t *weather_page_ = nullptr;
     lv_obj_t *music_page_ = nullptr;
     lv_obj_t *pomodoro_page_ = nullptr;
-    lv_obj_t *web_page_ = nullptr;
-    lv_obj_t *web_title_label_ = nullptr;
-    lv_obj_t *web_status_label_ = nullptr;
-    lv_obj_t *web_content_label_ = nullptr;
-    lv_obj_t *web_content_view_ = nullptr;
-    lv_obj_t *web_hint_label_ = nullptr;
-    lv_obj_t *web_image_obj_ = nullptr;
     struct WebSection {
         std::string text;
         int image_index = -1;
         int pages = 1;
     };
-    std::vector<WebSection> web_sections_;
-    std::vector<std::unique_ptr<web_page::WebImage>> web_images_;
-    int web_active_image_ = -1;
-    void SetWebContent(const web_page::TextContent& content);
-    void ClearWebImage();
-    void UpdateWebAnimation();
-    bool web_loaded_ = false;  // Accessed under DisplayLockGuard.
-    std::string web_loaded_url_;
-    int web_page_index_ = 0;
-    std::atomic<bool> web_loading_{false};
+    // The two readers have independent controls, content, pagination and workers.
+    struct ReaderPage {
+        CustomLcdDisplay* owner = nullptr;
+        DisplayMode mode = MODE_WEB;
+        lv_obj_t* root = nullptr;
+        lv_obj_t* title = nullptr;
+        lv_obj_t* status = nullptr;
+        lv_obj_t* content = nullptr;
+        lv_obj_t* view = nullptr;
+        lv_obj_t* hint = nullptr;
+        lv_obj_t* image = nullptr;
+        std::vector<WebSection> sections;
+        std::vector<std::unique_ptr<web_page::WebImage>> images;
+        int active_image = -1;
+        int page_index = 0;
+        bool loaded = false;
+        std::string loaded_url;
+        std::string etag;
+        std::string request_url;
+        std::string request_etag;
+        std::atomic<bool> loading{false};
+    };
+    ReaderPage web_reader_;
+    ReaderPage upload_reader_;
+    lv_timer_t* upload_poll_timer_ = nullptr;
     std::atomic<bool> web_stopping_{false};
+    ReaderPage& ActiveReader() { return display_mode_ == MODE_UPLOAD ? upload_reader_ : web_reader_; }
+    void SetWebContent(ReaderPage& page, const web_page::TextContent& content);
+    void ClearWebImage(ReaderPage& page);
+    void UpdateWebAnimation(ReaderPage& page);
 
     // ===== 天气站 UI 组件 =====
     // 状态栏（右上角浮动胶囊）
@@ -151,8 +164,9 @@ private:
     void SetupMusicUI();
     void SetupPomodoroUI();
     void SetupWebUI();
-    void StartWebLoad();  // Caller holds the display lock; HTTP runs in its own task.
-    void UpdateWebPagination();
+    void SetupReaderUI(ReaderPage& page, DisplayMode mode);
+    void StartWebLoad(ReaderPage& page, bool force = true);  // Caller holds the display lock; HTTP runs in its own task.
+    void UpdateWebPagination(ReaderPage& page);
     static void WebLoadTask(void *arg);
     void ApplyDisplayMode();
     
@@ -207,6 +221,9 @@ public:
     bool IsMusicMode() const { return display_mode_ == MODE_MUSIC; }
     bool IsPomodoroMode() const { return display_mode_ == MODE_POMODORO; }
     bool IsWebMode() const { return display_mode_ == MODE_WEB; }
+    bool IsUploadMode() const { return display_mode_ == MODE_UPLOAD; }
+    bool IsReaderMode() const { return IsWebMode() || IsUploadMode(); }
+    void SwitchToUploadPage();
     void SwitchToPomodoroPage();
     void SwitchToWebPage();
     void RefreshWebPage();

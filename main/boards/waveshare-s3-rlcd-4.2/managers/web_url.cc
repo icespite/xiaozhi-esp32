@@ -4,20 +4,25 @@
 
 namespace web_page {
 
-std::string GetUrl() {
+namespace {
+std::string GetStoredUrl(const char* key, const char* fallback) {
     nvs_handle_t handle;
-    if (nvs_open("web", NVS_READONLY, &handle) != ESP_OK) return kDefaultUrl;
+    if (nvs_open("web", NVS_READONLY, &handle) != ESP_OK) return fallback;
     size_t length = 0;
     std::string value;
-    if (nvs_get_str(handle, "url", nullptr, &length) == ESP_OK &&
+    if (nvs_get_str(handle, key, nullptr, &length) == ESP_OK &&
         length > 0 && length <= kMaxUrlBytes + 1) {
         value.resize(length);
-        if (nvs_get_str(handle, "url", value.data(), &length) == ESP_OK) value.resize(length - 1);
+        if (nvs_get_str(handle, key, value.data(), &length) == ESP_OK) value.resize(length - 1);
         else value.clear();
     }
     nvs_close(handle);
     std::string url;
-    return NormalizeUrl(value, url) ? url : kDefaultUrl;
+    return !value.empty() && NormalizeUrl(value, url) ? url : fallback;
 }
+}  // namespace
+
+std::string GetUrl() { return GetStoredUrl("url", kDefaultUrl); }
+std::string GetUploadUrl() { return GetStoredUrl("upload_url", ""); }
 
 }  // namespace web_page

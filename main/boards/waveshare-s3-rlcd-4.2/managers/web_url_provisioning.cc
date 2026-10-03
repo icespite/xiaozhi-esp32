@@ -7,10 +7,18 @@
 namespace web_page {
 namespace {
 
+struct UrlSetting {
+    const char* key;
+    bool upload;
+};
+UrlSetting web_setting{"url", false};
+UrlSetting upload_setting{"upload_url", true};
+
 esp_err_t SendUrl(httpd_req_t* req) {
+    auto& setting = *static_cast<UrlSetting*>(req->user_ctx);
     auto* json = cJSON_CreateObject();
     if (!json) return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
-    if (!cJSON_AddStringToObject(json, "url", GetUrl().c_str())) {
+    if (!cJSON_AddStringToObject(json, "url", (setting.upload ? GetUploadUrl() : GetUrl()).c_str())) {
         cJSON_Delete(json);
         return httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Out of memory");
     }
@@ -25,6 +33,7 @@ esp_err_t SendUrl(httpd_req_t* req) {
 }
 
 esp_err_t SaveUrl(httpd_req_t* req) {
+    auto& setting = *static_cast<UrlSetting*>(req->user_ctx);
     // Plain UTF-8 body avoids JSON escaping expanding the URL size limit.
     if (req->content_len > kMaxUrlBytes) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "URL is too long (maximum 1024 bytes)");
@@ -41,13 +50,13 @@ esp_err_t SaveUrl(httpd_req_t* req) {
         received += count;
     }
     std::string url;
-    if (!NormalizeUrl(body, url)) {
+    if (!(setting.upload ? NormalizeUploadUrl(body, url) : NormalizeUrl(body, url))) {
         return httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "Enter a valid http:// or https:// URL without credentials");
     }
     nvs_handle_t handle;
     auto result = nvs_open("web", NVS_READWRITE, &handle);
     if (result == ESP_OK) {
-        result = nvs_set_str(handle, "url", url.c_str());
+        result = nvs_set_str(handle, setting.key, url.c_str());
         if (result == ESP_OK) result = nvs_commit(handle);
         nvs_close(handle);
     }
@@ -60,10 +69,14 @@ esp_err_t SaveUrl(httpd_req_t* req) {
 }  // namespace
 
 void RegisterUrlHandlers(httpd_handle_t server) {
-    const httpd_uri_t get = {.uri = "/web/config", .method = HTTP_GET, .handler = SendUrl, .user_ctx = nullptr};
-    const httpd_uri_t post = {.uri = "/web/config", .method = HTTP_POST, .handler = SaveUrl, .user_ctx = nullptr};
+    const httpd_uri_t get = {.uri = "/web/config", .method = HTTP_GET, .handler = SendUrl, .user_ctx = &web_setting};
+    const httpd_uri_t post = {.uri = "/web/config", .method = HTTP_POST, .handler = SaveUrl, .user_ctx = &web_setting};
+    const httpd_uri_t upload_get = {.uri = "/upload/config", .method = HTTP_GET, .handler = SendUrl, .user_ctx = &upload_setting};
+    const httpd_uri_t upload_post = {.uri = "/upload/config", .method = HTTP_POST, .handler = SaveUrl, .user_ctx = &upload_setting};
     ESP_ERROR_CHECK(httpd_register_uri_handler(server, &get));
     ESP_ERROR_CHECK(httpd_register_uri_handler(server, &post));
+    ESP_ERROR_CHECK(httpd_register_uri_handler(server, &upload_get));
+    ESP_ERROR_CHECK(httpd_register_uri_handler(server, &upload_post));
 }
 
 }  // namespace web_page

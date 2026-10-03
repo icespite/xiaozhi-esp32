@@ -8,13 +8,14 @@ const scripts = [...html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/g)].map(m
 assert.equal(scripts.length, 2);
 const event = {preventDefault() {}};
 
-function page({getFails = false, saveFails = false} = {}) {
+function page({getFails = false, saveFails = false, uploadGetFails = false, uploadSaveFails = false} = {}) {
     const nodes = new Map();
     const calls = [];
     let storedUrl = 'https://existing.example/news';
+    let uploadUrl = 'http://192.168.1.20:8000/display';
     const node = id => {
         if (!nodes.has(id)) nodes.set(id, {
-            value: '', textContent: '', disabled: id === 'web_url',
+            value: '', textContent: '', disabled: id === 'web_url' || id === 'upload_url',
             classList: {add() {}, remove() {}}, addEventListener() {}
         });
         return nodes.get(id);
@@ -29,6 +30,12 @@ function page({getFails = false, saveFails = false} = {}) {
                 if (failed) return {ok: false, text: async () => 'Save failed'};
                 if (options.method === 'POST') storedUrl = options.body || 'https://icespite.top/';
                 return {ok: true, json: async () => ({url: storedUrl})};
+            }
+            if (path === '/upload/config') {
+                const failed = options.method === 'POST' ? uploadSaveFails : uploadGetFails;
+                if (failed) return {ok: false, text: async () => 'Upload URL save failed'};
+                if (options.method === 'POST') uploadUrl = options.body;
+                return {ok: true, json: async () => ({url: uploadUrl})};
             }
             assert.equal(path, '/submit');
             assert.deepEqual(JSON.parse(options.body), {ssid: 'Home WiFi', password: 'password'});
@@ -50,7 +57,8 @@ function page({getFails = false, saveFails = false} = {}) {
     node('web_url').value = ' https://new.example/article?q=1&lang=zh ';
     await context.submitForm(event);
     assert.deepEqual(calls.map(call => [call.path, call.method || 'GET']), [
-        ['/web/config', 'GET'], ['/web/config', 'POST'], ['/submit', 'POST']
+        ['/web/config', 'GET'], ['/web/config', 'POST'],
+        ['/upload/config', 'GET'], ['/upload/config', 'POST'], ['/submit', 'POST']
     ]);
     assert.equal(calls[1].body, 'https://new.example/article?q=1&lang=zh');
     assert.equal(context.window.location.href, '/done.html');
@@ -103,4 +111,21 @@ function page({getFails = false, saveFails = false} = {}) {
     await context.submitForm(event);
     assert.equal(calls[1].body, 'https://existing.example/news');
 }
-console.log('Wi-Fi URL form integration tests passed (6 scenarios)');
+// The upload reader uses a separate URL and can be disabled without changing web.
+{
+    const {context, node, calls} = page();
+    await context.loadUploadUrl();
+    assert.equal(node('upload_url').value, 'http://192.168.1.20:8000/display');
+    node('upload_url').value = '';
+    await context.submitUploadUrl(event);
+    assert.equal(node('upload_url').value, '');
+    assert(calls.every(call => call.path === '/upload/config'));
+}
+for (const flags of [{uploadGetFails: true}, {uploadSaveFails: true}]) {
+    const {context, node, calls} = page(flags);
+    await context.submitForm(event);
+    assert(!calls.some(call => call.path === '/submit'));
+    assert(node('error').textContent);
+    assert.equal(node('button').disabled, false);
+}
+console.log('Wi-Fi URL form integration tests passed (9 scenarios)');

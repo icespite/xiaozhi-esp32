@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>小智 · 上传内容</title>
+  <style>
+    :root{font-family:system-ui,sans-serif;color:#1d2929;background:#f3f5f2;line-height:1.6}
+    *{box-sizing:border-box}body{margin:0}main{max-width:1000px;margin:48px auto;padding:0 24px}
+    h1{margin:0;font-size:30px}h2{font-size:18px;margin-top:0}.muted{color:#64716f;font-size:14px}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-top:28px}.card{background:white;border:1px solid #dce4de;border-radius:18px;padding:24px}
+    label{display:block;font-weight:600;margin-bottom:8px}textarea{width:100%;min-height:180px;resize:vertical;border:1px solid #bdcbc1;border-radius:10px;padding:12px;font:inherit}
+    input[type=file]{max-width:100%;margin:8px 0 16px}button{background:#236452;color:white;border:0;border-radius:9px;padding:11px 18px;font:inherit;cursor:pointer}
+    button.secondary{background:#edf1ed;color:#34453a}button:disabled{opacity:.5;cursor:wait}.actions{display:flex;gap:10px;margin-top:18px;flex-wrap:wrap}
+    #status{min-height:26px;white-space:pre-wrap}#status[data-error=true]{color:#a62929}#current-text{white-space:pre-wrap;overflow-wrap:anywhere}
+    #current-image{display:block;max-width:100%;max-height:230px;margin:auto;image-rendering:auto}#current-image[hidden]{display:none}
+    code{word-break:break-all;background:#e8eee8;padding:3px 6px;border-radius:5px}.preview{border:6px solid #26332d;border-radius:12px;background:#fff;min-height:180px;padding:16px}
+    @media(max-width:720px){main{margin:24px auto}.grid{grid-template-columns:1fr}}
+  </style>
+</head>
+<body><main>
+  <h1>把内容送到小智屏幕</h1>
+  <p class="muted">发送一段文字、一张图片，或同时发送。设备切到第五页“上传内容”后会自动更新。</p>
+  <div class="grid">
+    <section class="card">
+      <h2>编辑新内容</h2>
+      <form id="upload-form">
+        <label for="text">文字</label>
+        <textarea id="text" placeholder="今天想在屏幕上显示什么？"></textarea>
+        <p class="muted"><span id="text-size">0</span> / 4096 字节 · 约 1300 个汉字</p>
+        <label for="text-file">或导入 UTF-8 文本文件</label>
+        <input id="text-file" type="file" accept=".txt,text/plain">
+        <label for="image">图片（可选）</label>
+        <input id="image" type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/bmp">
+        <p class="muted">支持 PNG / JPEG / GIF / WebP / BMP，图片最多 7 MiB、1600 万像素。自动缩小并转换为黑白图片，GIF 保留动画、帧时长与循环设置（转换后最多 256 KiB）。每次发送会替换当前内容。</p>
+        <div class="actions"><button id="publish" type="submit">发送到屏幕</button><button id="clear" type="button" class="secondary">清空屏幕</button></div>
+      </form>
+      <p id="status" role="status" aria-live="polite"></p>
+    </section>
+    <section class="card">
+      <h2>当前已发布内容</h2>
+      <p id="updated" class="muted">正在读取…</p>
+      <div class="preview"><div id="current-text"></div><img id="current-image" hidden alt="当前上传图片"></div>
+      <p class="muted">设备优先显示图片，长按 USER 翻页查看文字；只上传文字时直接显示文字。</p>
+      <h2>连接设备</h2>
+      <p class="muted">电脑与设备连接同一网络。在设备配网页面的“上传内容地址”中填写：</p>
+      <code id="device-url"></code>
+      <p class="muted">若这里显示 localhost 或 127.0.0.1，请替换为电脑的局域网 IP。单击 USER 切到上传内容页，长按翻页，双击立即刷新。</p>
+    </section>
+  </div>
+</main>
+<script>
+const text = document.getElementById('text');
+const image = document.getElementById('image');
+const status = document.getElementById('status');
+let busy = false;
+function message(value, error = false) { status.textContent = value; status.dataset.error = String(error); }
+function countText() { document.getElementById('text-size').textContent = new TextEncoder().encode(text.value).length; }
+function render(content) {
+  document.getElementById('current-text').textContent = content.text || (content.image ? '' : '还没有上传内容');
+  const preview = document.getElementById('current-image');
+  preview.hidden = !content.image;
+  if (content.image) preview.src = '/media/' + content.image;
+  else preview.removeAttribute('src');
+  document.getElementById('updated').textContent = content.updated_at ? '更新于 ' + new Date(content.updated_at).toLocaleString() : '等待首次上传';
+}
+async function request(options) {
+  const response = await fetch('/api/content', options);
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.error || '请求失败');
+  render(data);
+}
+async function publish(options, success) {
+  if (busy) return;
+  busy = true;
+  document.getElementById('publish').disabled = document.getElementById('clear').disabled = true;
+  message('正在发送…');
+  try { await request(options); message(success); }
+  catch (error) { message(error.message, true); }
+  finally { busy = false; document.getElementById('publish').disabled = document.getElementById('clear').disabled = false; }
+}
+text.addEventListener('input', countText);
+document.getElementById('text-file').addEventListener('change', async event => {
+  const file = event.target.files[0];
+  if (!file) return;
+  if (file.size > 4096) { message('文本文件不能超过 4096 字节', true); return; }
+  try { text.value = new TextDecoder('utf-8', {fatal:true}).decode(await file.arrayBuffer()); countText(); }
+  catch { message('文本文件不是有效的 UTF-8 编码', true); }
+});
+document.getElementById('upload-form').addEventListener('submit', event => {
+  event.preventDefault();
+  const file = image.files[0];
+  if (!text.value.trim() && !file) { message('请输入文字或选择图片', true); return; }
+  if (new TextEncoder().encode(text.value).length > 4096) { message('文字不能超过 4096 字节', true); return; }
+  if (file && file.size > 7 * 1024 * 1024) { message('图片不能超过 7 MiB', true); return; }
+  const form = new FormData(); form.append('text', text.value);
+  if (file) form.append('image', file);
+  publish({method:'POST', body:form}, '已发布。设备停留在上传内容页时，通常会在 5 秒内开始更新。');
+});
+document.getElementById('clear').addEventListener('click', () => publish({method:'DELETE'}, '已清空屏幕内容。'));
+document.getElementById('device-url').textContent = location.origin + '/display';
+request({cache:'no-store'}).catch(error => message(error.message, true));
+</script></body></html>

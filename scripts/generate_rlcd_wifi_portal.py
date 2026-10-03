@@ -19,12 +19,12 @@ def generate(component, fragment, output):
     source = replace_once(source, '    ESP_LOGI(TAG, "Web server started");',
                           '    web_page::RegisterUrlHandlers(server_);\n'
                           '    ESP_LOGI(TAG, "Web server started");')
-    source = replace_once(source, "config.max_uri_handlers = 24;", "config.max_uri_handlers = 26;")
+    source = replace_once(source, "config.max_uri_handlers = 24;", "config.max_uri_handlers = 28;")
     html = (component / "assets/wifi_configuration.html").read_text()
     marker = '<div id="wifi-tab" class="tab-content active">'
     html = replace_once(html, marker, marker + "\n" + fragment.read_text())
     marker = "const response = await fetch('/submit', {"
-    html = replace_once(html, marker, "await saveWebUrl();\n                " + marker)
+    html = replace_once(html, marker, "await saveWebUrl();\n                await saveUploadUrl();\n                " + marker)
     output.mkdir(parents=True, exist_ok=True)
     for name, content in (("wifi_configuration_ap.cc", source), ("rlcd_wifi_configuration.html", html)):
         path = output / name

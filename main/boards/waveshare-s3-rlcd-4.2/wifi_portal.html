@@ -11,6 +11,18 @@
     <p id="web_url_message" role="status"></p>
     <p style="text-align:center"><input type="submit" id="web_url_save" value="保存网址 / Save URL"></p>
 </form>
+<form id="upload_url_form" onsubmit="submitUploadUrl(event)">
+    <h3>上传内容地址 / Upload display URL</h3>
+    <p>
+        <label for="upload_url">第五页内容地址 / Display URL:</label>
+        <input type="url" id="upload_url" maxlength="1024" placeholder="http://192.168.1.100:8000/display"
+               style="width:100%;box-sizing:border-box" disabled>
+    </p>
+    <p style="font-size:13px">填写 Python 上传服务的 /display 地址；留空暂不启用。<br>
+        Enter your upload server's /display URL. Leave empty to disable.</p>
+    <p id="upload_url_message" role="status"></p>
+    <p style="text-align:center"><input type="submit" id="upload_url_save" value="保存上传地址 / Save upload URL"></p>
+</form>
 <script>
     let webUrlLoaded = false;
     let webUrlLoading = null;
@@ -66,6 +78,62 @@
     document.addEventListener('DOMContentLoaded', () => {
         loadWebUrl().catch(error => {
             document.getElementById('web_url_message').textContent = error.message;
+        });
+    });
+    let uploadUrlLoaded = false;
+    let uploadUrlLoading = null;
+
+    async function loadUploadUrl() {
+        if (uploadUrlLoading) return uploadUrlLoading;
+        uploadUrlLoading = (async () => {
+            const response = await fetch('/upload/config', {cache: 'no-store'});
+            if (!response.ok) throw new Error('读取网址失败，请点击保存重试 / Could not load URL; click Save to retry');
+            const config = await response.json();
+            const input = document.getElementById('upload_url');
+            input.value = config.url;
+            input.disabled = false;
+            uploadUrlLoaded = true;
+            document.getElementById('upload_url_message').textContent = '';
+        })();
+        try {
+            await uploadUrlLoading;
+        } finally {
+            uploadUrlLoading = null;
+        }
+    }
+
+    async function saveUploadUrl() {
+        // Never overwrite an existing URL with an empty field after a failed GET.
+        if (!uploadUrlLoaded) await loadUploadUrl();
+        const input = document.getElementById('upload_url');
+        const url = input.value.trim();
+        if (url && !/^https?:\/\//i.test(url)) {
+            throw new Error('请输入 http:// 或 https:// 网址 / Enter an HTTP(S) URL');
+        }
+        const response = await fetch('/upload/config', {
+            method: 'POST', headers: {'Content-Type': 'text/plain; charset=utf-8'}, body: url
+        });
+        if (!response.ok) throw new Error(await response.text());
+        input.value = (await response.json()).url;
+        document.getElementById('upload_url_message').textContent = '网址已保存 / URL saved';
+    }
+
+    async function submitUploadUrl(event) {
+        event.preventDefault();
+        const button = document.getElementById('upload_url_save');
+        button.disabled = true;
+        try {
+            await saveUploadUrl();
+        } catch (error) {
+            document.getElementById('upload_url_message').textContent = error.message;
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadUploadUrl().catch(error => {
+            document.getElementById('upload_url_message').textContent = error.message;
         });
     });
 </script>

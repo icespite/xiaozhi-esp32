@@ -112,7 +112,12 @@ CustomLcdDisplay::CustomLcdDisplay(esp_lcd_panel_io_handle_t panel_io,
 CustomLcdDisplay::~CustomLcdDisplay() {
     // Let the HTTP worker release its client before destroying display controls.
     web_stopping_ = true;
-    while (web_loading_) {
+    {
+        DisplayLockGuard lock(this);
+        if (upload_poll_timer_) lv_timer_delete(upload_poll_timer_);
+        upload_poll_timer_ = nullptr;
+    }
+    while (web_reader_.loading || upload_reader_.loading) {
         vTaskDelay(pdMS_TO_TICKS(10));
     }
     if (update_task_handle_) {
@@ -120,10 +125,12 @@ CustomLcdDisplay::~CustomLcdDisplay() {
     }
     {
         DisplayLockGuard lock(this);
-        ClearWebImage();
-        web_images_.clear();
-        if (web_page_) lv_obj_delete(web_page_);
-        web_page_ = nullptr;
+        for (auto* page : {&web_reader_, &upload_reader_}) {
+            ClearWebImage(*page);
+            page->images.clear();
+            if (page->root) lv_obj_delete(page->root);
+            page->root = nullptr;
+        }
     }
     delete rlcd_;
 }
@@ -363,12 +370,14 @@ void CustomLcdDisplay::SetTheme(Theme* theme) {
 }
 
 void CustomLcdDisplay::ApplyDisplayMode() {
-    UpdateWebAnimation();
+    UpdateWebAnimation(web_reader_);
+    UpdateWebAnimation(upload_reader_);
     // 先隐藏所有页面
     if (weather_page_) lv_obj_add_flag(weather_page_, LV_OBJ_FLAG_HIDDEN);
     if (music_page_) lv_obj_add_flag(music_page_, LV_OBJ_FLAG_HIDDEN);
     if (pomodoro_page_) lv_obj_add_flag(pomodoro_page_, LV_OBJ_FLAG_HIDDEN);
-    if (web_page_) lv_obj_add_flag(web_page_, LV_OBJ_FLAG_HIDDEN);
+    if (web_reader_.root) lv_obj_add_flag(web_reader_.root, LV_OBJ_FLAG_HIDDEN);
+    if (upload_reader_.root) lv_obj_add_flag(upload_reader_.root, LV_OBJ_FLAG_HIDDEN);
 
     // 显示当前页面
     switch (display_mode_) {
@@ -382,22 +391,28 @@ void CustomLcdDisplay::ApplyDisplayMode() {
             if (pomodoro_page_) lv_obj_remove_flag(pomodoro_page_, LV_OBJ_FLAG_HIDDEN);
             break;
         case MODE_WEB:
-            if (web_page_) lv_obj_remove_flag(web_page_, LV_OBJ_FLAG_HIDDEN);
-            UpdateWebPagination();
+            if (web_reader_.root) lv_obj_remove_flag(web_reader_.root, LV_OBJ_FLAG_HIDDEN);
+            UpdateWebPagination(web_reader_);
             // A changed provisioning URL takes effect on the next visit.
-            if (!web_loaded_ || web_loaded_url_ != web_page::GetUrl()) StartWebLoad();
+            if (!web_reader_.loaded || web_reader_.loaded_url != web_page::GetUrl()) StartWebLoad(web_reader_);
+            break;
+        case MODE_UPLOAD:
+            if (upload_reader_.root) lv_obj_remove_flag(upload_reader_.root, LV_OBJ_FLAG_HIDDEN);
+            UpdateWebPagination(upload_reader_);
+            StartWebLoad(upload_reader_, false);
             break;
     }
 }
 
 void CustomLcdDisplay::CycleDisplayMode() {
     DisplayLockGuard lock(this);
-    // 四页循环：天气 → 音乐 → 番茄钟 → 网页 → 天气
+    // 五页循环：天气 → 音乐 → 番茄钟 → 网页 → 上传内容 → 天气
     switch (display_mode_) {
         case MODE_WEATHER:  display_mode_ = MODE_MUSIC; break;
         case MODE_MUSIC:    display_mode_ = MODE_POMODORO; break;
         case MODE_POMODORO: display_mode_ = MODE_WEB; break;
-        case MODE_WEB: display_mode_ = MODE_WEATHER; break;
+        case MODE_WEB: display_mode_ = MODE_UPLOAD; break;
+        case MODE_UPLOAD: display_mode_ = MODE_WEATHER; break;
     }
     ApplyDisplayMode();
     const char* name = "未知";
@@ -406,6 +421,7 @@ void CustomLcdDisplay::CycleDisplayMode() {
         case MODE_MUSIC:    name = "音乐页"; break;
         case MODE_POMODORO: name = "番茄钟"; break;
         case MODE_WEB: name = "网页"; break;
+        case MODE_UPLOAD: name = "上传内容"; break;
     }
     ESP_LOGI(TAG, "页面切换: %s", name);
 }

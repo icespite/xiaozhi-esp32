@@ -108,12 +108,12 @@ private:
             if (display_) {
                 display_->CycleDisplayMode();
             }
-            ESP_LOGI(TAG, "USER 按钮单击：切换天气页/音乐页/番茄钟页/网页");
+            ESP_LOGI(TAG, "USER 按钮单击：切换天气页/音乐页/番茄钟页/网页/上传内容");
         });
 
         user_button_.OnDoubleClick([this]() {
             if (display_) display_->NotifyUserActivity();  // 记录用户活动
-            if (display_ && display_->IsWebMode()) {
+            if (display_ && display_->IsReaderMode()) {
                 display_->RefreshWebPage();
                 return;
             }
@@ -123,7 +123,7 @@ private:
 
         user_button_.OnLongPress([this]() {
             if (display_) display_->NotifyUserActivity();  // 记录用户活动
-            if (display_ && display_->IsWebMode()) {
+            if (display_ && display_->IsReaderMode()) {
                 display_->NextWebPage();
                 return;
             }
@@ -357,10 +357,10 @@ private:
         // ===== 屏幕切换工具（语音可调用）=====
         mcp_server.AddTool(
             "self.disp.switch",
-            "Switch display page between weather, music, pomodoro, and web (URL configured during Wi-Fi setup).\n"
-            "Use when user says: '切到音乐页', '打开天气页', '切换屏幕', '打开番茄钟页面', '打开网页', 'switch screen'.\n"
+            "Switch display page between weather, music, pomodoro, web, and upload (uploaded pictures/text).\n"
+            "Use when user says: '切到音乐页', '打开天气页', '切换屏幕', '打开番茄钟页面', '打开网页', '打开上传内容', '显示上传图片', 'switch screen'.\n"
             "Args:\n"
-            "  `mode`: 'toggle' | 'music' | 'weather' | 'pomodoro' | 'web' (default: 'toggle')",
+            "  `mode`: 'toggle' | 'music' | 'weather' | 'pomodoro' | 'web' | 'upload' (default: 'toggle')",
             PropertyList({
                 Property("mode", kPropertyTypeString, std::string("toggle"))
             }),
@@ -390,13 +390,16 @@ private:
                     display_->SwitchToPomodoroPage();
                 } else if (mode == "web") {
                     display_->SwitchToWebPage();
+                } else if (mode == "upload") {
+                    display_->SwitchToUploadPage();
                 } else {
-                    return std::string("参数 mode 无效，请使用 toggle/music/weather/pomodoro/web");
+                    return std::string("参数 mode 无效，请使用 toggle/music/weather/pomodoro/web/upload");
                 }
 
                 if (display_->IsMusicMode()) return std::string("已切换到音乐页");
                 if (display_->IsPomodoroMode()) return std::string("已切换到番茄钟页");
                 if (display_->IsWebMode()) return std::string("已切换到配置的网页");
+                if (display_->IsUploadMode()) return std::string("已切换到上传内容页");
                 return std::string("已切换到天气页");
             }
         );
