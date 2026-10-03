@@ -29,6 +29,8 @@ typedef struct _gd_GIF {
     const char * data;
     uint8_t is_file;
     uint32_t f_rw_p;
+    size_t data_size;  /* SIZE_MAX for legacy unbounded embedded assets. */
+    bool read_error;
     int32_t anim_start;
     uint16_t width, height;
     uint16_t depth;
@@ -54,6 +56,7 @@ typedef struct _gd_GIF {
 gd_GIF * gd_open_gif_file(const char * fname);
 
 gd_GIF * gd_open_gif_data(const void * data);
+gd_GIF * gd_open_gif_data_sized(const void * data, size_t size);
 
 void gd_render_frame(gd_GIF * gif, uint8_t * buffer);
 

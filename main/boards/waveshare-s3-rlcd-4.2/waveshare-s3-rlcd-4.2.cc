@@ -357,8 +357,8 @@ private:
         // ===== 屏幕切换工具（语音可调用）=====
         mcp_server.AddTool(
             "self.disp.switch",
-            "Switch display page between weather, music, pomodoro, and web (icespite.top).\n"
-            "Use when user says: '切到音乐页', '打开天气页', '切换屏幕', '打开番茄钟页面', '打开网页', '打开icespite.top', 'switch screen'.\n"
+            "Switch display page between weather, music, pomodoro, and web (URL configured during Wi-Fi setup).\n"
+            "Use when user says: '切到音乐页', '打开天气页', '切换屏幕', '打开番茄钟页面', '打开网页', 'switch screen'.\n"
             "Args:\n"
             "  `mode`: 'toggle' | 'music' | 'weather' | 'pomodoro' | 'web' (default: 'toggle')",
             PropertyList({
@@ -396,7 +396,7 @@ private:
 
                 if (display_->IsMusicMode()) return std::string("已切换到音乐页");
                 if (display_->IsPomodoroMode()) return std::string("已切换到番茄钟页");
-                if (display_->IsWebMode()) return std::string("已切换到 icespite.top 网页");
+                if (display_->IsWebMode()) return std::string("已切换到配置的网页");
                 return std::string("已切换到天气页");
             }
         );

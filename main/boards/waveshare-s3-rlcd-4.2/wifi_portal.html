@@ -1,0 +1,71 @@
+<!-- Inserted into the Wi-Fi tab of the upstream provisioning page. -->
+<form id="web_url_form" onsubmit="submitWebUrl(event)">
+    <h3>网页访问 URL / Web page URL</h3>
+    <p>
+        <label for="web_url">第四页网址 / Page URL:</label>
+        <input type="url" id="web_url" maxlength="1024" placeholder="https://icespite.top/"
+               style="width:100%;box-sizing:border-box" disabled>
+    </p>
+    <p style="font-size:13px">支持 HTTP/HTTPS。留空恢复默认网址；点击连接 Wi-Fi 时会自动保存。<br>
+        HTTP/HTTPS only. Leave empty for the default. Also saved when connecting Wi-Fi.</p>
+    <p id="web_url_message" role="status"></p>
+    <p style="text-align:center"><input type="submit" id="web_url_save" value="保存网址 / Save URL"></p>
+</form>
+<script>
+    let webUrlLoaded = false;
+    let webUrlLoading = null;
+
+    async function loadWebUrl() {
+        if (webUrlLoading) return webUrlLoading;
+        webUrlLoading = (async () => {
+            const response = await fetch('/web/config', {cache: 'no-store'});
+            if (!response.ok) throw new Error('读取网址失败，请点击保存重试 / Could not load URL; click Save to retry');
+            const config = await response.json();
+            const input = document.getElementById('web_url');
+            input.value = config.url;
+            input.disabled = false;
+            webUrlLoaded = true;
+            document.getElementById('web_url_message').textContent = '';
+        })();
+        try {
+            await webUrlLoading;
+        } finally {
+            webUrlLoading = null;
+        }
+    }
+
+    async function saveWebUrl() {
+        // Never overwrite an existing URL with an empty field after a failed GET.
+        if (!webUrlLoaded) await loadWebUrl();
+        const input = document.getElementById('web_url');
+        const url = input.value.trim();
+        if (url && !/^https?:\/\//i.test(url)) {
+            throw new Error('请输入 http:// 或 https:// 网址 / Enter an HTTP(S) URL');
+        }
+        const response = await fetch('/web/config', {
+            method: 'POST', headers: {'Content-Type': 'text/plain; charset=utf-8'}, body: url
+        });
+        if (!response.ok) throw new Error(await response.text());
+        input.value = (await response.json()).url;
+        document.getElementById('web_url_message').textContent = '网址已保存 / URL saved';
+    }
+
+    async function submitWebUrl(event) {
+        event.preventDefault();
+        const button = document.getElementById('web_url_save');
+        button.disabled = true;
+        try {
+            await saveWebUrl();
+        } catch (error) {
+            document.getElementById('web_url_message').textContent = error.message;
+        } finally {
+            button.disabled = false;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadWebUrl().catch(error => {
+            document.getElementById('web_url_message').textContent = error.message;
+        });
+    });
+</script>

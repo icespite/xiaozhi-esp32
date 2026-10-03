@@ -12,9 +12,15 @@ LvglGif::LvglGif(const lv_img_dsc_t* img_dsc)
         return;
     }
 
-    gif_ = gd_open_gif_data(img_dsc->data);
+    gif_ = gd_open_gif_data_sized(img_dsc->data, img_dsc->data_size);
     if (!gif_) {
         ESP_LOGE(TAG, "Failed to open GIF from image descriptor");
+        return;
+    }
+
+    if (gd_get_frame(gif_) != 1) {
+        gd_close_gif(gif_);
+        gif_ = nullptr;
         return;
     }
 
@@ -199,7 +205,7 @@ void LvglGif::NextFrame() {
 
     // Get next frame
     int has_next = gd_get_frame(gif_);
-    if (has_next == 0) {
+    if (has_next <= 0) {
         // Animation truly finished (non-infinite loop)
         playing_ = false;
         if (timer_) {

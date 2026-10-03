@@ -106,29 +106,29 @@
 └──────────────────────────────────────────┘
 ```
 
-### 网页页（icespite.top）
+### 网页页（可配置网址）
 
-第四页通过 HTTPS 直接加载 `https://icespite.top/`，以适合 400×300 黑白屏的文字阅读模式显示正文。顶部显示网站与加载状态，中间显示正文，底部显示阅读页码和按键提示。
+第四页加载配网时设置的 HTTP/HTTPS 网址，默认 `https://icespite.top/`，以适合 400×300 黑白屏的图文阅读模式显示正文、图片和 GIF 动画。顶部显示网站与加载状态，中间显示正文，底部显示阅读页码和按键提示。
 
 - 单击 USER 循环切入，或说“打开网页”，由 AI 调用 `self.disp.switch(mode="web")`。
 - 首次进入自动加载；再次进入保留当前正文和阅读位置。
-- 长按 USER 阅读下一屏，最后一屏之后回到开头；双击 USER 重新加载。
+- 在热点配网页面的“网页访问 URL”设置网址（最长 1024 字节），连接 Wi-Fi 前自动保存，也可点击“保存网址”单独保存。留空恢复默认地址；重启后保留设置，修改后下次进入网页页或双击刷新时生效。
+- 长按 USER 阅读下一屏，最后一屏之后回到开头；双击 USER 重新加载正文与图片。
+- 按 HTML 顺序穿插文字页和图片页。支持 PNG（含透明度）、JPEG 和 GIF；图片在独立阅读页中等比例缩放，适配屏幕且不裁切，GIF 保留动画，屏幕仍为黑白显示。
+- 图片支持 HTTP/HTTPS 绝对地址、相对路径、协议相对地址，以及 `data-src` / `data-original` 懒加载属性；只有 `srcset` 时使用第一个候选地址。图片失败时显示替代文字和原因，可继续阅读正文。
+- 仅解码当前阅读页的图片，翻页时释放像素缓冲；切换到其他模式时暂停 GIF，返回网页时恢复。
 - 加载在独立后台任务中执行，不持有屏幕锁等待网络。未联网或加载失败时提示重试，刷新失败保留上次成功的正文。
 - 使用系统证书包校验 HTTPS。HTML 响应最多 32 KiB，提取后的正文最多 8 KiB；超过正文限制时按完整 UTF-8 字符截断并提示。
+- 每页网页最多保留 8 张图片，每张下载最多 256 KiB，压缩图片缓存总计最多 1 MiB。原图宽高各不超过 2048 像素、总像素不超过 524288，超限显示提示。图片加载阶段有总时限，后续超时图片显示占位。
 
-这是网页**文字阅读模式**：显示网站返回的 HTML 正文，过滤脚本、样式和注释；不执行 JavaScript，不还原原站 CSS、图片、动画，也不提供链接跳转。需要保留原始网页视觉效果时，应另接浏览器截图服务。
+这是网页**图文阅读模式**：提取 HTML 正文和 `<img>` 图片，过滤脚本、样式和注释。不执行 JavaScript、不还原原站 CSS 布局或 CSS 背景图，不支持 SVG / WebP / 视频、内联 data URL 或链接跳转；JavaScript 动态插入的图片需要网站提供静态 HTML。
 
-代码入口：`web_ui.cc`（页面与联网）、`managers/web_page_parser.cc`（正文提取）。
+代码入口：`web_ui.cc`（图文分页与联网）、`managers/web_page_parser.cc`（正文、图片引用和地址解析）、`managers/web_image.cc`（图片解码及生命周期）。
 
-可在仓库根目录运行主机侧解析测试：
+可在仓库根目录运行 URL 校验、配网页面提交、解析与 GIF 解码测试（需 Python 3、Node.js、GCC/G++ 和已下载的 Wi-Fi 组件；C/C++ 测试启用 ASan/UBSan）：
 
 ```bash
-g++ -std=c++17 -Wall -Wextra -Werror -fsanitize=address,undefined \
-  -I main/boards/waveshare-s3-rlcd-4.2/managers \
-  tests/rlcd_web_page_parser_test.cc \
-  main/boards/waveshare-s3-rlcd-4.2/managers/web_page_parser.cc \
-  -o /tmp/xiaozhi-web-parser-test
-/tmp/xiaozhi-web-parser-test
+bash tests/run_rlcd_web_tests.sh
 ```
 
 ### 布局说明
@@ -275,6 +275,7 @@ AI：  调用 self.system.info 获取数据
 | Namespace | Key | 数据类型 | 说明 |
 |---|---|---|---|
 | `wifi` | `ssid`, `password` | String | WiFi 凭据（由 BluFi/Hotspot 配网写入）|
+| `web` | `url` | String | 第四页访问的网址，未设置时使用 `https://icespite.top/` |
 | `memo` | `items` | JSON Array | 备忘录列表 |
 
 **备忘录 JSON 格式：**
@@ -344,13 +345,17 @@ AI：  调用 self.system.info 获取数据
 1. 设备启动后自动开启热点：`Xiaozhi-XXXX`
 2. 手机连接该热点
 3. 浏览器访问：`http://192.168.4.1`
-4. 网页上输入 WiFi 信息
+4. 在首页“网页访问 URL”中填写第四页要访问的网址，或留空使用默认 `https://icespite.top/`
+5. 选择 WiFi、输入密码并点击连接；网址会先保存到设备，再执行 WiFi 连接
+6. 已配网的设备可重新进入配网，点击“保存网址”单独修改地址，再退出配网；下次打开网页页或双击刷新时使用新地址
 
 **优点：**
 - 无需安装 App
 - 跨平台兼容性好
 
 **注意：** BluFi 和热点配网不能同时启用，在 `idf.py menuconfig` 中选择一种。
+
+网址配置入口仅在热点配网页面提供；BluFi 保留已存网址，未设置时使用默认地址。RLCD 的页面扩展由 `wifi_portal.cmake` 在构建目录生成，不修改 `managed_components`；Wi-Fi 组件升级导致插入位置变化时，构建会明确报错以便适配。
 
 ---
 
@@ -531,7 +536,7 @@ idf.py monitor
 ### 已实现
 - 自动省电模式（5 分钟无活动后降频刷新）
 - 多屏幕模式切换（天气页 / 音乐页 / 番茄钟页 / 网页页）
-- `icespite.top` 网页文字阅读、翻页与手动刷新
+- 可配置网址的网页图文阅读、PNG/JPEG/GIF、翻页与手动刷新
 - 番茄钟（启动 / 暂停 / 恢复 / 停止）与白噪音播放
 - MCP 驱动天气回写（`self.weather.update`）
 - 备忘录基础能力（新增 / 列表 / 完成 / 清空）

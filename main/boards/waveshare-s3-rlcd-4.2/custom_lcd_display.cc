@@ -22,6 +22,7 @@
 #include <esp_log.h>
 #include <esp_err.h>
 #include "custom_lcd_display.h"
+#include "managers/web_url.h"
 #include "lcd_display.h"
 #include "esp_lvgl_port.h"
 #include "settings.h"
@@ -116,6 +117,13 @@ CustomLcdDisplay::~CustomLcdDisplay() {
     }
     if (update_task_handle_) {
         vTaskDelete(update_task_handle_);
+    }
+    {
+        DisplayLockGuard lock(this);
+        ClearWebImage();
+        web_images_.clear();
+        if (web_page_) lv_obj_delete(web_page_);
+        web_page_ = nullptr;
     }
     delete rlcd_;
 }
@@ -355,6 +363,7 @@ void CustomLcdDisplay::SetTheme(Theme* theme) {
 }
 
 void CustomLcdDisplay::ApplyDisplayMode() {
+    UpdateWebAnimation();
     // 先隐藏所有页面
     if (weather_page_) lv_obj_add_flag(weather_page_, LV_OBJ_FLAG_HIDDEN);
     if (music_page_) lv_obj_add_flag(music_page_, LV_OBJ_FLAG_HIDDEN);
@@ -375,7 +384,8 @@ void CustomLcdDisplay::ApplyDisplayMode() {
         case MODE_WEB:
             if (web_page_) lv_obj_remove_flag(web_page_, LV_OBJ_FLAG_HIDDEN);
             UpdateWebPagination();
-            if (!web_loaded_) StartWebLoad();
+            // A changed provisioning URL takes effect on the next visit.
+            if (!web_loaded_ || web_loaded_url_ != web_page::GetUrl()) StartWebLoad();
             break;
     }
 }

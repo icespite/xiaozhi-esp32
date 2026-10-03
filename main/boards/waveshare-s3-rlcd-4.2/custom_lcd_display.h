@@ -7,6 +7,7 @@
 #include "rlcd_driver.h"
 #include "managers/sensor_manager.h"
 #include "managers/weather_manager.h"
+#include "managers/web_image.h"
 
 // 天气站 + AI 混合显示
 // 
@@ -45,11 +46,25 @@ private:
     lv_obj_t *music_page_ = nullptr;
     lv_obj_t *pomodoro_page_ = nullptr;
     lv_obj_t *web_page_ = nullptr;
+    lv_obj_t *web_title_label_ = nullptr;
     lv_obj_t *web_status_label_ = nullptr;
     lv_obj_t *web_content_label_ = nullptr;
     lv_obj_t *web_content_view_ = nullptr;
     lv_obj_t *web_hint_label_ = nullptr;
+    lv_obj_t *web_image_obj_ = nullptr;
+    struct WebSection {
+        std::string text;
+        int image_index = -1;
+        int pages = 1;
+    };
+    std::vector<WebSection> web_sections_;
+    std::vector<std::unique_ptr<web_page::WebImage>> web_images_;
+    int web_active_image_ = -1;
+    void SetWebContent(const web_page::TextContent& content);
+    void ClearWebImage();
+    void UpdateWebAnimation();
     bool web_loaded_ = false;  // Accessed under DisplayLockGuard.
+    std::string web_loaded_url_;
     int web_page_index_ = 0;
     std::atomic<bool> web_loading_{false};
     std::atomic<bool> web_stopping_{false};

@@ -834,12 +834,17 @@ idf_component_register(SRCS ${SOURCES}
                         efuse
                         bt
                         esp_http_client
+                        esp_http_server
                         esp_lcd
                         json
                         esp_adc
                         fatfs
                         sdmmc
                     )
+
+if(CONFIG_BOARD_TYPE_WAVESHARE_S3_RLCD_4_2 AND CONFIG_USE_HOTSPOT_WIFI_PROVISIONING)
+    include(boards/waveshare-s3-rlcd-4.2/wifi_portal.cmake)
+endif()
 
 # Use target_compile_definitions to define BOARD_TYPE, BOARD_NAME
 # If BOARD_NAME is empty, use BOARD_TYPE
