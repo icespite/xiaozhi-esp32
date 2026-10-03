@@ -95,7 +95,9 @@ curl -X DELETE http://127.0.0.1:8000/api/content
 server/.venv/bin/python -m unittest discover -s server -p 'test_*.py' -v
 bash tests/run_rlcd_web_tests.sh
 bash tests/run_rlcd_uploaded_gif_tests.sh
+bash tests/run_rlcd_image_tests.sh
 ```
 
 测试使用临时目录和随机本地端口，不修改运行服务的已发布内容。
 上传 GIF 测试会将服务实际转换出的动画交给固件使用的 C 解码器，逐帧比较像素、时长和循环次数（ASan/UBSan）。
+图片显示测试需要 CMake、Ninja 和 C/C++ 编译器，使用仓库内的真实 LVGL，将服务转换出的 PNG 经过固件图片类加载到图片控件，核对 RGB565 渲染像素及反复翻页后的缓存释放（ASan/UBSan）。

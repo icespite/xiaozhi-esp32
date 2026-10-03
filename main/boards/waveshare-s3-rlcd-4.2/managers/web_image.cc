@@ -46,6 +46,9 @@ const lv_image_dsc_t* WebImage::Decode() {
                 std::swap(png_->data[i * 4], png_->data[i * 4 + 2]);
             }
             descriptor_.header = png_->header;
+            // This is an image descriptor, not the lv_draw_buf_t that owns the
+            // pixels. ALLOCATED would make LVGL read nonexistent buffer fields.
+            descriptor_.header.flags &= ~LV_IMAGE_FLAGS_ALLOCATED;
             descriptor_.data = png_->data;
             descriptor_.data_size = png_->data_size;
             return &descriptor_;
